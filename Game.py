@@ -166,7 +166,6 @@ class Player:
             if self.burst_fire_counter == 2:  # Every third shot
                 spread_count = 3 + (2 * (self.burst_fire_level-1))  # 3, 5, 7 bullets based on level
                 spread_angle = 30 + (10 * self.burst_fire_level)  # Wider spread with each level
-                angles = []
 
                 half_spread = spread_angle / 2
                 if spread_count > 1:
@@ -290,7 +289,7 @@ class UpgradeMenu:
 
         # Define all possible upgrades
         self.all_upgrades = [
-            Upgrade("Burst Fire", "Every third shot fires in a 3-bullet spread pattern",
+            Upgrade("Burst Fire", "Every third shot fires bullets in a spread pattern",
                     UpgradeType.OFFENSIVE, lambda player: self.upgrade_burst_fire(player)),
             Upgrade("Homing Rounds", "Bullets slightly track nearest enemy",
                     UpgradeType.OFFENSIVE, lambda player: setattr(player, 'homing_rounds', True)),
@@ -313,12 +312,12 @@ class UpgradeMenu:
         ]
 
     def upgrade_burst_fire(self, player):
-            player.burst_fire_level += 1
-            if player.burst_fire_counter == -1:
-                player.burst_fire_counter = 0
+        player.burst_fire_level += 1
+        if player.burst_fire_counter == -1:
+            player.burst_fire_counter = 0
 
     def upgrade_piercing(self, player):
-            player.piercing_level += 1
+        player.piercing_level += 1
 
     def increase_fire_rate(self, player):
         player.shoot_delay *= 0.75
@@ -684,6 +683,32 @@ class Game:
         self.boss = None
         self.victory = False
 
+        self.background_music = None
+        self.boss_music = None
+        self.victory_music = None
+        self.game_over_music = None
+        self.music_volume = 0.5
+        self.load_music()
+
+    def load_music(self):
+        try:
+            # Load different music tracks
+            pygame.mixer.music.load("Music/background_music.mp3")  # Main background music
+            self.boss_music = pygame.mixer.Sound("Music/boss_music.mp3")
+            self.victory_music = pygame.mixer.Sound("Music/victory_music.mp3")
+            self.game_over_music = pygame.mixer.Sound("Music/game_over_music.mp3")
+
+            # Set volumes
+            pygame.mixer.music.set_volume(self.music_volume)
+            self.boss_music.set_volume(self.music_volume)
+            self.victory_music.set_volume(self.music_volume)
+            self.game_over_music.set_volume(self.music_volume)
+
+            # Start playing background music and loop it
+            pygame.mixer.music.play(-1)  # -1 means loop indefinitely
+        except Exception as e:
+            print(f"Error loading music: {e}")
+
     def spawn_enemy(self):
         enemy_type = random.choice(["tank", "assassin", "mage"])
         side = random.randint(0, 3)
@@ -767,7 +792,9 @@ class Game:
             self.wave_timer = 0
             self.enemy_spawn_delay = max(20, int(self.enemy_spawn_delay * 0.9))  # Increase spawn rate
             self.player.health = min(self.player.max_health, self.player.health + 20)  # Heal between waves
-            if self.wave == 10:
+            if self.wave == 5:
+                pygame.mixer.music.stop()
+                self.boss_music.play(-1)
                 self.boss = Boss(SCREEN_WIDTH // 2, -100)
                 self.enemies.append(self.boss)
 
@@ -838,12 +865,12 @@ class Game:
                         running = False
                     elif event.key == pygame.K_r and self.game_over:
                         # Reset game
+                        pygame.mixer.stop()
                         self.__init__()
                         self.game_over = False
 
                 if self.upgrade_menu.handle_input(event, self.player):
                     continue
-
             if not self.game_over and not self.upgrade_menu.visible and not self.victory:
                 # Game logic
                 keys = pygame.key.get_pressed()
@@ -883,6 +910,8 @@ class Game:
 
             if self.victory:
                 self.draw_victory()
+                pygame.mixer.music.stop()
+                self.victory_music.play()
             elif not self.game_over:
                 self.screen.blit(self.background, (0, 0))
                 self.player.draw(self.screen)
@@ -892,6 +921,8 @@ class Game:
                 self.upgrade_menu.draw()
             else:
                 self.draw_game_over()
+                pygame.mixer.music.stop()
+                self.game_over_music.play(-1)
 
             pygame.display.flip()
             self.clock.tick(FPS)
