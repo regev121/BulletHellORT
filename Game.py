@@ -94,6 +94,7 @@ class Bullet:
 
         self.x += self.dx
         self.y += self.dy
+
         self.age += 1  # Increment age each frame
 
     def draw(self, screen):
@@ -526,10 +527,11 @@ class Boss(Enemy):
         self.target_x = SCREEN_WIDTH // 2
         self.target_y = SCREEN_HEIGHT // 4  # Boss stays in top quarter of screen
         self.sprite = pygame.transform.scale(
-            pygame.image.load("Sprites/tank.png"),  # You can replace with a boss sprite
+            pygame.image.load("Sprites/Boss.png"),  # You can replace with a boss sprite
             (120, 120)
         )
         self.bullets = []
+        self.angle = 90
 
     def move_towards_player(self, player, enemies):
         # Override the parent's movement method to ignore the player
@@ -560,12 +562,14 @@ class Boss(Enemy):
         if self.attack_cooldown <= 0:
             if self.state == BossState.PHASE1:
                 # Circle of bullets
-                for angle in range(0, 360, 30):
-                    rad = math.radians(angle)
-                    target_x = self.x + math.cos(rad) * 100
-                    target_y = self.y + math.sin(rad) * 100
-                    bullet = Bullet(self.x, self.y, target_x, target_y,
-                                    speed=5, color=PINK, homing=False, lifespan=1200)
+                time_factor = pygame.time.get_ticks()/600
+                for i in range(-5, 6):
+                    x_offset = math.sin(time_factor + i * 0.5) * 100  # Sine wave offset
+                    bullet_x = self.x + x_offset  # Modify spawn position
+                    bullet_y = self.y  # Start from boss's Y position
+
+                    bullet = Bullet(bullet_x, bullet_y, player.x, player.y,
+                                    speed=6, color=PINK, lifespan=300)
                     self.bullets.append(bullet)
 
             elif self.state == BossState.PHASE2:
@@ -615,9 +619,7 @@ class Boss(Enemy):
         # Update bullets
         for bullet in self.bullets[:]:
             bullet.move([player])  # Pass player as a list for homing
-            if bullet.is_off_screen():
-                self.bullets.remove(bullet)
-            if bullet.is_expired():
+            if bullet.is_off_screen() or bullet.is_expired():
                 self.bullets.remove(bullet)
 
     def draw(self, screen):
@@ -743,7 +745,7 @@ class Game:
             self.wave_timer = 0
             self.enemy_spawn_delay = max(20, int(self.enemy_spawn_delay * 0.9))  # Increase spawn rate
             self.player.health = min(self.player.max_health, self.player.health + 20)  # Heal between waves
-            if self.wave == 2:
+            if self.wave == 10:
                 self.boss = Boss(SCREEN_WIDTH // 2, -100)
                 self.enemies.append(self.boss)
 
