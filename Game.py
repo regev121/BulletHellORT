@@ -46,7 +46,7 @@ class Upgrade:
 
 class Bullet:
     def __init__(self, x, y, target_x, target_y, speed=10, color=GREEN,
-                 homing=False, piercing=False, burst=False, damage=10.0, lifespan=-1):
+                 homing=False, piercing=False, burst=False, damage=10.0, lifespan=-1, max_pierce=2):
         self.x = x
         self.y = y
         self.radius = 5
@@ -56,7 +56,7 @@ class Bullet:
         self.piercing = piercing
         self.burst = burst
         self.enemies_hit = 0
-        self.max_pierce = 1  # How many enemies the bullet can pass through
+        self.max_pierce = max_pierce
         self.ricochet_count = 0
         self.temporal_decay = False
         self.damage = damage
@@ -107,6 +107,7 @@ class Bullet:
     def is_expired(self):
         return self.age >= self.lifespan  # Check if the bullet has exceeded its lifespan
 
+
 class Player:
     def __init__(self, x, y):
         self.x = x
@@ -133,8 +134,10 @@ class Player:
 
         # Upgrade flags
         self.upgrades = []
+        self.burst_fire_level = 0
         self.burst_fire_counter = -1
         self.shield_cooldown = 0
+        self.piercing_level = 0
         self.shield_active = False
         self.has_energy_shield = False
         self.has_nanobot_repair = False
@@ -161,7 +164,17 @@ class Player:
     def auto_shoot(self, mouse_x, mouse_y):
         if self.shoot_cooldown <= 0:
             if self.burst_fire_counter == 2:  # Every third shot
-                angles = [-15, 0, 15]  # Spread angles in degrees
+                spread_count = 3 + (2 * (self.burst_fire_level-1))  # 3, 5, 7 bullets based on level
+                spread_angle = 30 + (10 * self.burst_fire_level)  # Wider spread with each level
+                angles = []
+
+                half_spread = spread_angle / 2
+                if spread_count > 1:
+                    step = spread_angle / (spread_count - 1)
+                    angles = [half_spread - (step * i) for i in range(spread_count)]
+                else:
+                    angles = [0]
+
                 for angle in angles:
                     rad_angle = math.radians(angle)
                     dx = mouse_x - self.x
@@ -172,7 +185,8 @@ class Player:
                     target_y = self.y + rotated_dy
                     bullet = Bullet(self.x, self.y, target_x, target_y,
                                     homing=self.homing_rounds,
-                                    piercing=self.piercing_shots,
+                                    piercing=True if self.piercing_level > 0 else False,
+                                    max_pierce=2 + (2 * self.piercing_level),
                                     damage=self.base_damage * self.damage_multiplier)  # Apply damage
                     self.bullets.append(bullet)
                 self.burst_fire_counter = 0
@@ -276,12 +290,12 @@ class UpgradeMenu:
 
         # Define all possible upgrades
         self.all_upgrades = [
-            Upgrade("Burst Fire", "Every third shot fires in a spread pattern",
-                    UpgradeType.OFFENSIVE, lambda player: setattr(player, 'burst_fire_counter', 1)),
+            Upgrade("Burst Fire", "Every third shot fires in a 3-bullet spread pattern",
+                    UpgradeType.OFFENSIVE, lambda player: self.upgrade_burst_fire(player)),
             Upgrade("Homing Rounds", "Bullets slightly track nearest enemy",
                     UpgradeType.OFFENSIVE, lambda player: setattr(player, 'homing_rounds', True)),
-            Upgrade("Piercing Shots", "Bullets pass through one enemy",
-                    UpgradeType.OFFENSIVE, lambda player: setattr(player, 'piercing_shots', True)),
+            Upgrade("Piercing Shots", "Bullets pierce through enemies",
+                    UpgradeType.OFFENSIVE, lambda player: self.upgrade_piercing(player)),
             Upgrade("Rate Overdrive", "25% faster fire rate",
                     UpgradeType.OFFENSIVE, lambda player: self.increase_fire_rate(player)),
             Upgrade("Enhanced Damage", "Increase bullet damage by 25%",
@@ -297,6 +311,14 @@ class UpgradeMenu:
             Upgrade("League Of Tanks", "Increase health by 20%",
                     UpgradeType.UTILITY, lambda player: self.increase_health(player))
         ]
+
+    def upgrade_burst_fire(self, player):
+            player.burst_fire_level += 1
+            if player.burst_fire_counter == -1:
+                player.burst_fire_counter = 0
+
+    def upgrade_piercing(self, player):
+            player.piercing_level += 1
 
     def increase_fire_rate(self, player):
         player.shoot_delay *= 0.75
@@ -516,8 +538,8 @@ class Boss(Enemy):
         self.radius = 40
         self.base_speed = 3
         self.speed = self.base_speed
-        self.health = 10000
-        self.max_health = 10000
+        self.health = 100000
+        self.max_health = 100000
         self.color = RED
         self.exp_value = 500
         self.state = BossState.PHASE1
@@ -745,7 +767,7 @@ class Game:
             self.wave_timer = 0
             self.enemy_spawn_delay = max(20, int(self.enemy_spawn_delay * 0.9))  # Increase spawn rate
             self.player.health = min(self.player.max_health, self.player.health + 20)  # Heal between waves
-            if self.wave == 5:
+            if self.wave == 10:
                 self.boss = Boss(SCREEN_WIDTH // 2, -100)
                 self.enemies.append(self.boss)
 
