@@ -745,7 +745,7 @@ class Game:
             self.wave_timer = 0
             self.enemy_spawn_delay = max(20, int(self.enemy_spawn_delay * 0.9))  # Increase spawn rate
             self.player.health = min(self.player.max_health, self.player.health + 20)  # Heal between waves
-            if self.wave == 10:
+            if self.wave == 5:
                 self.boss = Boss(SCREEN_WIDTH // 2, -100)
                 self.enemies.append(self.boss)
 
