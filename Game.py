@@ -664,7 +664,7 @@ class Boss(Enemy):
 
 class Game:
     def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((400, 300), pygame.FULLSCREEN)
         pygame.display.set_caption("Bullet Hell Game")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 36)
