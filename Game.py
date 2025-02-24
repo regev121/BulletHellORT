@@ -3,11 +3,23 @@ import random
 import math
 from enum import Enum, auto
 
+#Player movement and shooting mechanics
+
+#Various enemy types with different behaviors
+
+#Upgrades system with offensive, defensive, and utility buffs
+
+#Boss enemy with multiple attack phases
+
+#Experience and level progression system
+
+#Collision detection and game-over handling 
+
 pygame.init()
 
 # Constants
-SCREEN_WIDTH = 1920
-SCREEN_HEIGHT = 1080
+screen = pygame.display.set_mode()
+SCREEN_WIDTH,SCREEN_HEIGHT = screen.get_size()
 FPS = 60
 
 # Colors
@@ -664,7 +676,7 @@ class Boss(Enemy):
 
 class Game:
     def __init__(self):
-        self.screen = pygame.display.set_mode((400, 300), pygame.FULLSCREEN)
+        self.screen = pygame.display.set_mode()
         pygame.display.set_caption("Bullet Hell Game")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 36)
@@ -679,7 +691,7 @@ class Game:
         self.wave_duration = 1800  # 30 seconds at 60 FPS
         self.background = pygame.image.load(
             "BackGround/Background.png").convert()
-        self.background = pygame.transform.scale(self.background, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.background = pygame.transform.scale(self.background,self.screen.get_size())
         self.boss = None
         self.victory = False
 
