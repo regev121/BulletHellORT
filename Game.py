@@ -2,6 +2,9 @@ import pygame
 import random
 import math
 from enum import Enum, auto
+from cryptography.fernet import Fernet
+import os
+
 
 #Player movement and shooting mechanics
 
@@ -13,7 +16,7 @@ from enum import Enum, auto
 
 #Experience and level progression system
 
-#Collision detection and game-over handling 
+#Collision detection and game-over handling
 
 pygame.init()
 
@@ -34,6 +37,17 @@ ORANGE = (255, 165, 0)
 CYAN = (0, 255, 255)
 PINK = (255, 125, 125)
 
+KEY_FILE = "key.key"
+
+if os.path.exists(KEY_FILE):
+    with open(KEY_FILE, "rb") as keyfile:
+        KEY = keyfile.read()
+else:
+    KEY = Fernet.generate_key()
+    with open(KEY_FILE, "wb") as keyfile:
+        keyfile.write(KEY)
+
+CIPHER = Fernet(KEY)
 
 class UpgradeType(Enum):
     OFFENSIVE = "offensive"
@@ -701,6 +715,35 @@ class Game:
         self.game_over_music = None
         self.music_volume = 0.5
         self.load_music()
+        self.high_score = self.load_high_score()
+
+    def encryption(self):
+        score = self.high_score
+        text = ""
+        i = 0
+        while score != 0:
+            unit = score % 10
+            text += str(unit + ord('a'))
+            i += 1
+            score /= 10
+        encText = CIPHER.encrypt(text.encode())
+        return encText
+
+    def load_high_score(self):
+        try:
+            with open("highscore.txt", "rb") as file:
+                encText = file.read().strip()
+                if not encText:
+                    return 0
+                decText = CIPHER.decrypt(encText).decode()
+                return int("".join(chr(int(c) - ord('a')) for c in decText))
+        except (FileNotFoundError, ValueError):
+            return 0
+
+    def save_high_score(self):
+        with open("highscore.txt", "wb") as file:
+            score = self.encryption()
+            file.write(score)
 
     def load_music(self):
         try:
@@ -811,8 +854,11 @@ class Game:
                 self.enemies.append(self.boss)
 
     def check_victory(self):
-        if self.wave >= 20 and self.boss and self.boss.health <= 0:
+        if self.wave >= 10 and self.boss and self.boss.health <= 0:
             self.victory = True
+            if self.player.score > self.high_score:
+                self.high_score = self.player.score
+                self.save_high_score()
 
     def draw_victory(self):
         victory_text = self.font.render("VICTORY!", True, YELLOW)
@@ -820,15 +866,25 @@ class Game:
         wave_text = self.font.render(f"Waves Survived: {self.wave}", True, WHITE)
         level_text = self.font.render(f"Final Level: {self.player.level}", True, WHITE)
 
+        high_score_text = self.font.render(f"Highest Score: {self.high_score}", True, WHITE)
+        new_high_score_text = None
+        if self.player.score > self.high_score:
+            new_high_score_text = self.font.render(f"New Highest Score: {self.player.score}!!!!", True, GREEN)
+
         text_y = SCREEN_HEIGHT // 2 - 100
-        for text in [victory_text, score_text, wave_text, level_text]:
+        for text in [victory_text, score_text, wave_text, level_text, high_score_text]:
             text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, text_y))
             self.screen.blit(text, text_rect)
             text_y += 50
 
+        if new_high_score_text:
+            text_rect = new_high_score_text.get_rect(center=(SCREEN_WIDTH // 2, text_y))
+            self.screen.blit(new_high_score_text, text_rect)
+
         restart_text = self.font.render("Press R to Play Again or ESC to Quit", True, WHITE)
         restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
         self.screen.blit(restart_text, restart_rect)
+
 
     def draw_game_over(self):
         game_over_text = self.font.render("GAME OVER", True, RED)
@@ -836,11 +892,22 @@ class Game:
         wave_text = self.font.render(f"Waves Survived: {self.wave}", True, WHITE)
         level_text = self.font.render(f"Final Level: {self.player.level}", True, WHITE)
 
+        high_score_text = self.font.render(f"Highest Score: {self.high_score}", True, WHITE)
+        new_high_score_text = None
+        if self.player.score > self.high_score:
+            new_high_score_text = self.font.render(f"New Highest Score: {self.player.score}!!!!", True, GREEN)
+            self.high_score = self.player.score
+            self.save_high_score()
+
         text_y = SCREEN_HEIGHT // 2 - 100
-        for text in [game_over_text, score_text, wave_text, level_text]:
+        for text in [game_over_text, score_text, wave_text, level_text, high_score_text]:
             text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, text_y))
             self.screen.blit(text, text_rect)
             text_y += 50
+
+        if new_high_score_text:
+            text_rect = new_high_score_text.get_rect(center=(SCREEN_WIDTH // 2, text_y))
+            self.screen.blit(new_high_score_text, text_rect)
 
         restart_text = self.font.render("Press R to Restart or ESC to Quit", True, WHITE)
         restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
