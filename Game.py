@@ -3,26 +3,27 @@ import random
 import math
 from enum import Enum, auto
 from cryptography.fernet import Fernet
+from sklearn.linear_model import LinearRegression
+import numpy as np
 import os
 
+# Player movement and shooting mechanics
 
-#Player movement and shooting mechanics
+# Various enemy types with different behaviors
 
-#Various enemy types with different behaviors
+# Upgrades system with offensive, defensive, and utility buffs
 
-#Upgrades system with offensive, defensive, and utility buffs
+# Boss enemy with multiple attack phases
 
-#Boss enemy with multiple attack phases
+# Experience and level progression system
 
-#Experience and level progression system
-
-#Collision detection and game-over handling
+# Collision detection and game-over handling
 
 pygame.init()
 
 # Constants
 screen = pygame.display.set_mode()
-SCREEN_WIDTH,SCREEN_HEIGHT = screen.get_size()
+SCREEN_WIDTH, SCREEN_HEIGHT = screen.get_size()
 FPS = 60
 
 # Colors
@@ -48,6 +49,7 @@ else:
         keyfile.write(KEY)
 
 CIPHER = Fernet(KEY)
+
 
 class UpgradeType(Enum):
     OFFENSIVE = "offensive"
@@ -190,7 +192,7 @@ class Player:
     def auto_shoot(self, mouse_x, mouse_y):
         if self.shoot_cooldown <= 0:
             if self.burst_fire_counter == 2:  # Every third shot
-                spread_count = 3 + (2 * (self.burst_fire_level-1))  # 3, 5, 7 bullets based on level
+                spread_count = 3 + (2 * (self.burst_fire_level - 1))  # 3, 5, 7 bullets based on level
                 spread_angle = 30 + (10 * self.burst_fire_level)  # Wider spread with each level
 
                 half_spread = spread_angle / 2
@@ -609,7 +611,7 @@ class Boss(Enemy):
         if self.attack_cooldown <= 0:
             if self.state == BossState.PHASE1:
                 # Circle of bullets
-                time_factor = pygame.time.get_ticks()/600
+                time_factor = pygame.time.get_ticks() / 600
                 for i in range(-5, 6):
                     x_offset = math.sin(time_factor + i * 0.5) * 100  # Sine wave offset
                     bullet_x = self.x + x_offset  # Modify spawn position
@@ -688,6 +690,68 @@ class Boss(Enemy):
             bullet.draw(screen)
 
 
+class ScorePredictor:
+    def __init__(self):
+        self.model = LinearRegression()
+        self.data_X = []
+        self.data_y = []
+        self.font = pygame.font.SysFont("Arial", 16)
+        self.high_score = 0
+
+    def add_data_point(self, game_time, score, experience, total_kills, wave, level, high_score):
+        self.data_X.append([game_time, experience, total_kills, wave, level, high_score])
+        self.data_y.append([score])
+        self.high_score = high_score
+
+        if len(self.data_X) >= 6:
+            self.train_model()
+
+    def train_model(self):
+        # Train linear regression model
+        X = np.array(self.data_X, dtype=np.float32)
+        y = np.array(self.data_y, dtype=np.float32)
+        self.model.fit(X, y)
+
+    def draw(self, surface):
+        if len(self.data_X) < 6:
+            return  # Not enough data for prediction
+
+        current_data = np.array([self.data_X[-1]], dtype=np.float32)
+        predicted_score = self.model.predict(current_data)[0][0]
+
+        wave = self.data_X[-1][3]  # wave is the 4th input (index 3)
+        wave_factor = np.log2(np.log2(wave+1)+1) # Smooth growth instead of linear
+        predicted_final_score = max(0, predicted_score * wave_factor)
+
+        # Cap based on high score
+        cap = max(self.high_score, predicted_final_score, 1)
+
+        # Bar visual settings
+        bar_width, bar_height = 30, 180
+        progress = min(predicted_final_score / cap, 1.0)
+        filled_height = int(bar_height * progress)
+
+        # Position: bottom-right
+        padding = 20
+        screen_width, screen_height = surface.get_size()
+        bar_x = screen_width - bar_width - padding
+        bar_y = screen_height - bar_height - padding
+
+        # Yellow transparent background
+        bg_surface = pygame.Surface((bar_width + 10, bar_height + 40), pygame.SRCALPHA)
+        bg_surface.fill((255, 255, 0, 100))
+        surface.blit(bg_surface, (bar_x - 5, bar_y - 30))
+
+        # Draw bar background and progress
+        pygame.draw.rect(surface, (60, 60, 60), (bar_x, bar_y, bar_width, bar_height))
+        pygame.draw.rect(surface, (0, 255, 0), (bar_x, bar_y + bar_height - filled_height, bar_width, filled_height))
+
+        # White text
+        text = self.font.render(f"{int(predicted_final_score)}", True, (255, 255, 255))
+        text_rect = text.get_rect(center=(bar_x + bar_width // 2, bar_y - 10))
+        surface.blit(text, text_rect)
+
+
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode()
@@ -705,7 +769,7 @@ class Game:
         self.wave_duration = 1800  # 30 seconds at 60 FPS
         self.background = pygame.image.load(
             "BackGround/Background.png").convert()
-        self.background = pygame.transform.scale(self.background,self.screen.get_size())
+        self.background = pygame.transform.scale(self.background, self.screen.get_size())
         self.boss = None
         self.victory = False
 
@@ -716,34 +780,46 @@ class Game:
         self.music_volume = 0.5
         self.load_music()
         self.high_score = self.load_high_score()
+        self.score_predictor = ScorePredictor()
+        self.game_time = 0  # Track game time in frames
+        self.total_kills = 0
 
     def encryption(self):
-        score = self.high_score
-        text = ""
-        i = 0
-        while score != 0:
-            unit = score % 10
-            text += str(unit + ord('a'))
-            i += 1
-            score /= 10
-        encText = CIPHER.encrypt(text.encode())
-        return encText
+        # Convert score to string directly, then encrypt it
+        score_str = str(self.high_score)
+        # Simple encoding: adding 'a' to each digit to get a character
+        encoded = ''.join([chr(int(digit) + ord('a')) for digit in score_str])
+        encrypted = CIPHER.encrypt(encoded.encode())
+        return encrypted
 
     def load_high_score(self):
         try:
             with open("highscore.txt", "rb") as file:
-                encText = file.read().strip()
-                if not encText:
+                encrypted_text = file.read().strip()
+                if not encrypted_text:
                     return 0
-                decText = CIPHER.decrypt(encText).decode()
-                return int("".join(chr(int(c) - ord('a')) for c in decText))
-        except (FileNotFoundError, ValueError):
+                decrypted_text = CIPHER.decrypt(encrypted_text).decode()
+                # Decode by subtracting 'a' from each character to get a digit
+                score_str = ''
+                for char in decrypted_text:
+                    # Make sure we only process valid characters
+                    if ord(char) >= ord('a') and ord(char) <= ord('a') + 9:
+                        score_str += str(ord(char) - ord('a'))
+                print(f"Decoded score string: {score_str}")  # Debug print
+                return int(score_str) if score_str else 0
+        except (FileNotFoundError, ValueError, Exception) as e:
+            print(f"Error loading high score: {e}")
             return 0
 
     def save_high_score(self):
-        with open("highscore.txt", "wb") as file:
-            score = self.encryption()
-            file.write(score)
+        # Only save if current score is higher than high score
+        print(f"Current score: {self.player.score}, High score: {self.high_score}")  # Debug print
+        if self.player.score > self.high_score:
+            self.high_score = self.player.score
+            with open("highscore.txt", "wb") as file:
+                encrypted = self.encryption()
+                file.write(encrypted)
+            print(f"New high score saved: {self.high_score}")
 
     def load_music(self):
         try:
@@ -885,7 +961,6 @@ class Game:
         restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100))
         self.screen.blit(restart_text, restart_rect)
 
-
     def draw_game_over(self):
         game_over_text = self.font.render("GAME OVER", True, RED)
         score_text = self.font.render(f"Final Score: {self.player.score}", True, WHITE)
@@ -918,6 +993,8 @@ class Game:
         score_text = self.font.render(f"Score: {self.player.score}", True, WHITE)
         self.screen.blit(score_text, (10, 10))
 
+        self.score_predictor.draw(self.screen)
+
         # Draw wave information
         wave_text = self.font.render(f"Wave {self.wave}", True, WHITE)
         wave_rect = wave_text.get_rect(topright=(SCREEN_WIDTH - 10, 10))
@@ -944,24 +1021,29 @@ class Game:
                         running = False
                     elif event.key == pygame.K_r and self.game_over:
                         # Reset game
+                        self.save_high_score()
                         pygame.mixer.stop()
+                        old_high_score = self.high_score
                         self.__init__()
+                        self.high_score = max(self.high_score, old_high_score)
                         self.game_over = False
 
                 if self.upgrade_menu.handle_input(event, self.player):
                     continue
+
             if not self.game_over and not self.upgrade_menu.visible and not self.victory:
                 # Game logic
                 keys = pygame.key.get_pressed()
                 self.player.move(keys)
+                self.game_time += 1
+                previous_enemy_count = len(self.enemies)
 
                 # Auto-shoot at mouse position
                 mouse_x, mouse_y = pygame.mouse.get_pos()
                 self.player.auto_shoot(mouse_x, mouse_y)
-
                 self.player.update(self.enemies)
 
-                # Enemy spawning and updating
+                # Enemy spawning
                 self.enemy_spawn_timer += 1
                 if self.enemy_spawn_timer >= self.enemy_spawn_delay:
                     self.spawn_enemy()
@@ -978,10 +1060,29 @@ class Game:
                         enemy.cast_spell(self.player)
 
                 self.check_collisions()
+
+                # Count kills this frame
+                current_enemy_count = len(self.enemies)
+                new_kills = previous_enemy_count - current_enemy_count
+                if new_kills > 0:
+                    self.total_kills += new_kills
+
+                # Add data point to predictor
+                self.score_predictor.add_data_point(
+                    self.game_time,
+                    self.player.score,
+                    self.player.experience,
+                    self.total_kills,
+                    self.wave,
+                    self.player.level,
+                    self.high_score
+                )
+
                 self.check_level_up()
 
                 if self.player.health <= 0:
                     self.game_over = True
+
                 self.check_victory()
 
             # Drawing
@@ -991,6 +1092,7 @@ class Game:
                 self.draw_victory()
                 pygame.mixer.music.stop()
                 self.victory_music.play()
+
             elif not self.game_over:
                 self.screen.blit(self.background, (0, 0))
                 self.player.draw(self.screen)
@@ -998,6 +1100,10 @@ class Game:
                     enemy.draw(self.screen)
                 self.draw_hud()
                 self.upgrade_menu.draw()
+
+                # ✅ Draw score prediction here
+                self.score_predictor.draw(self.screen)
+
             else:
                 self.draw_game_over()
                 pygame.mixer.music.stop()
@@ -1006,6 +1112,7 @@ class Game:
             pygame.display.flip()
             self.clock.tick(FPS)
 
+        self.save_high_score()
         pygame.quit()
 
 
